@@ -11,14 +11,62 @@ export default function App() {
   const [input, setInput] = useState("");
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const chatContainerRef = useRef(null);
-  
+
   // Проверяем, запущено ли приложение в Telegram
   const isTelegram = window.Telegram?.WebApp;
   const tg = isTelegram ? window.Telegram.WebApp : null;
-  
+
   // Получаем данные пользователя Telegram
   const user = isTelegram ? tg.initDataUnsafe.user : null;
   const userName = user ? user.first_name || user.username : "Гость";
+
+  // Функция для отправки данных в бота
+  const sendToBot = (character, text) => {
+    if (!isTelegram || !tg) {
+      console.log('Отправка данных (режим разработки):', { character, text });
+      return;
+    }
+
+    const payload = {
+      character: character,
+      text: text,
+      userId: user?.id,
+      chatId: activeId,
+      timestamp: Date.now()
+    };
+
+    try {
+      tg.sendData(JSON.stringify(payload));
+      console.log('Данные отправлены в бота:', payload);
+    } catch (error) {
+      console.error('Ошибка отправки данных:', error);
+      if (tg.showAlert) {
+        tg.showAlert('Ошибка отправки сообщения. Попробуйте еще раз.');
+      }
+    }
+  };
+
+  // Функция для добавления ответа от бота
+  const addBotResponse = (characterName, responseText) => {
+    const newChat = [
+      ...chat,
+      {
+        role: "assistant",
+        content: responseText,
+        timestamp: Date.now(),
+        name: characterName
+      }
+    ];
+
+    setMessages({ ...messages, [activeId]: newChat });
+  };
+
+  // Экспортируем функцию для использования извне (если нужно)
+  useEffect(() => {
+    if (window.addBotResponse) {
+      window.addBotResponse = addBotResponse;
+    }
+  }, [chat, messages, activeId]);
 
   // Загрузка сохраненных сообщений
   useEffect(() => {
@@ -33,18 +81,33 @@ export default function App() {
     localStorage.setItem("messages", JSON.stringify(messages));
   }, [messages]);
 
-  // Настройка Telegram BackButton
+  // Настройка Telegram BackButton и обработка сообщений от бота
   useEffect(() => {
     if (!tg) return;
-    
+
     if (sidebarOpen) {
       tg.BackButton.show();
       tg.BackButton.onClick(closeSidebar);
     } else {
       tg.BackButton.hide();
     }
-    
-    return () => tg.BackButton.offClick(closeSidebar);
+
+    // Обработка сообщений от бота (если поддерживается)
+    const handleMainButtonClick = () => {
+      // Можно добавить дополнительную логику
+      console.log('MainButton clicked');
+    };
+
+    if (tg.MainButton) {
+      tg.MainButton.onClick(handleMainButtonClick);
+    }
+
+    return () => {
+      tg.BackButton.offClick(closeSidebar);
+      if (tg.MainButton) {
+        tg.MainButton.offClick(handleMainButtonClick);
+      }
+    };
   }, [sidebarOpen, tg]);
 
   // Автопрокрутка к последнему сообщению
@@ -59,36 +122,28 @@ export default function App() {
 
   const sendMessage = () => {
     if (!input.trim()) return;
-    
+
     const newChat = [
-      ...chat, 
-      { 
-        role: "user", 
+      ...chat,
+      {
+        role: "user",
         content: input,
         timestamp: Date.now(),
         name: userName
       }
     ];
-    
+
     setMessages({ ...messages, [activeId]: newChat });
     setInput("");
 
     // Отправка данных в Telegram бота
-    if (isTelegram) {
-      const payload = { 
-        character: activeChar.name, 
-        text: input,
-        userId: user?.id,
-        chatId: activeId
-      };
-      tg.sendData(JSON.stringify(payload));
-    }
+    sendToBot(activeChar.name, input);
   };
 
   const addCharacter = () => {
     const name = prompt("Имя персонажа:");
     if (!name) return;
-    
+
     const promptText = prompt("Как должен говорить персонаж?") || "Ты персонаж.";
     const avatar = prompt("Ссылка на аватар:") || "https://placehold.co/40x40";
     const id = name.toLowerCase().replace(/[^a-z0-9]/gi, "");
@@ -114,7 +169,7 @@ export default function App() {
   // Стили для адаптации под тему Telegram
   const getThemeStyles = () => {
     if (!tg) return {};
-    
+
     return {
       bgColor: tg.themeParams.bg_color || "#18222d",
       textColor: tg.themeParams.text_color || "#ffffff",
@@ -130,7 +185,7 @@ export default function App() {
   const renderMessage = (msg, idx) => {
     const isUser = msg.role === "user";
     const timestamp = new Date(msg.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-    
+
     return (
       <div
         key={idx}
@@ -160,7 +215,7 @@ export default function App() {
   };
 
   return (
-    <div 
+    <div
       className="flex h-[var(--tg-viewport-height)] w-full overflow-hidden"
       style={{
         backgroundColor: theme.bgColor,
@@ -168,7 +223,7 @@ export default function App() {
       }}
     >
       {/* Кнопка меню для мобильных */}
-      <div 
+      <div
         className={`fixed top-3 left-3 z-20 p-2 rounded-full ${
           sidebarOpen ? "hidden" : ""
         } md:hidden`}
@@ -183,18 +238,18 @@ export default function App() {
       </div>
 
       {/* Сайдбар */}
-      <div 
+      <div
         className={`fixed inset-0 z-10 bg-black bg-opacity-50 transition-opacity ${
           sidebarOpen ? "opacity-100 visible" : "opacity-0 invisible"
         } md:opacity-0 md:invisible md:relative md:bg-transparent`}
         onClick={closeSidebar}
       ></div>
-      
-      <div 
+
+      <div
         className={`w-[280px] bg-[var(--tg-theme-secondary-bg-color)] border-r border-[var(--tg-theme-hint-color)] z-10 fixed md:static h-full transform transition-transform ${
           sidebarOpen ? "translate-x-0" : "-translate-x-full"
         } md:translate-x-0`}
-        style={{ 
+        style={{
           backgroundColor: "rgba(255, 255, 255, 0.05)",
           borderColor: "rgba(255, 255, 255, 0.1)",
         }}
@@ -203,8 +258,8 @@ export default function App() {
           <div className="font-bold text-lg" style={{ color: theme.textColor }}>
             Персонажи
           </div>
-          <button 
-            onClick={addCharacter} 
+          <button
+            onClick={addCharacter}
             className="text-xl w-8 h-8 flex items-center justify-center rounded-full hover:bg-[rgba(255,255,255,0.1)]"
             style={{ color: theme.textColor }}
           >
@@ -216,8 +271,8 @@ export default function App() {
             <div
               key={char.id}
               className={`flex items-center gap-3 p-3 cursor-pointer ${
-                char.id === activeId 
-                  ? "bg-[var(--tg-theme-button-color)]" 
+                char.id === activeId
+                  ? "bg-[var(--tg-theme-button-color)]"
                   : "hover:bg-[rgba(255,255,255,0.05)]"
               }`}
               onClick={() => {
@@ -229,9 +284,9 @@ export default function App() {
                 color: char.id === activeId ? theme.buttonTextColor : theme.textColor,
               }}
             >
-              <img 
-                src={char.avatar} 
-                className="w-10 h-10 rounded-full border-2 border-[rgba(255,255,255,0.2)]" 
+              <img
+                src={char.avatar}
+                className="w-10 h-10 rounded-full border-2 border-[rgba(255,255,255,0.2)]"
                 alt={char.name}
               />
               <div className="text-sm font-medium truncate">{char.name}</div>
@@ -242,14 +297,14 @@ export default function App() {
 
       {/* Основная область чата */}
       <div className="flex flex-col flex-1 w-full">
-        <div 
+        <div
           className="p-3 font-semibold text-base border-b border-[var(--tg-theme-hint-color)] flex items-center gap-2"
-          style={{ 
+          style={{
             backgroundColor: "rgba(255, 255, 255, 0.03)",
             borderColor: "rgba(255, 255, 255, 0.1)",
           }}
         >
-          <div 
+          <div
             className="md:hidden p-1 rounded-md hover:bg-[rgba(255,255,255,0.1)]"
             onClick={openSidebar}
           >
@@ -263,7 +318,7 @@ export default function App() {
         </div>
 
         {/* Область сообщений */}
-        <div 
+        <div
           ref={chatContainerRef}
           className="flex-1 overflow-y-auto px-4 py-3"
         >
@@ -280,9 +335,9 @@ export default function App() {
         </div>
 
         {/* Поле ввода */}
-        <div 
+        <div
           className="p-3 flex gap-2 border-t"
-          style={{ 
+          style={{
             backgroundColor: "rgba(255, 255, 255, 0.03)",
             borderColor: "rgba(255, 255, 255, 0.1)",
           }}
@@ -299,8 +354,8 @@ export default function App() {
           <button
             onClick={sendMessage}
             className="bg-[var(--tg-theme-button-color)] text-[var(--tg-theme-button-text-color)] px-4 py-2 rounded-xl text-sm font-medium disabled:opacity-50"
-            style={{ 
-              backgroundColor: theme.buttonColor, 
+            style={{
+              backgroundColor: theme.buttonColor,
               color: theme.buttonTextColor,
             }}
             disabled={!input.trim()}
