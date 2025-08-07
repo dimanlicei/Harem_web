@@ -1,13 +1,244 @@
 <!DOCTYPE html>
 <html lang="ru">
-  <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <script src="https://telegram.org/js/telegram-web-app.js"></script>
-    <title>Character Chat</title>
-  </head>
-  <body class="overflow-hidden">
-    <div id="root"></div>
-    <script type="module" src="/src/main.jsx"></script>
-  </body>
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <script src="https://telegram.org/js/telegram-web-app.js?v=1"></script>
+  <title>Character Chat</title>
+  
+  <!-- PWA мета-теги -->
+  <meta name="theme-color" content="#18222d">
+  <link rel="manifest" href="/assets/manifest-CPEm7uAf.json">
+  
+  <!-- Иконки -->
+  <link rel="icon" href="/favicon.ico" sizes="any">
+  <link rel="icon" href="/icon.svg" type="image/svg+xml">
+  <link rel="apple-touch-icon" href="/apple-touch-icon.png">
+  
+  <!-- Предзагрузка ресурсов -->
+  <link rel="preload" href="data:text/jsx;base64,aW1wb3J0IFJlYWN0IGZyb20gInJlYWN0IjsKaW1wb3J0IFJlYWN0RE9NIGZyb20gInJlYWN0LWRvbS9jbGllbnQiOwppbXBvcnQgQXBwIGZyb20gIi4vQXBwLmpzeCI7CmltcG9ydCAiLi9pbmRleC5jc3MiOwoKVGVsZWdyYW0uV2ViQXBwLnJlYWR5KCk7CgpSZWFjdERPTS5jcmVhdGVSb290KGRvY3VtZW50LmdldEVsZW1lbnRCeUlkKCJyb290IikpLnJlbmRlcigKICA8UmVhY3QuU3RyaWN0TW9kZT4KICAgIDxBcHAgLz4KICA8L1JlYWN0LlN0cmljdE1vZGU+Cik7" as="script">
+  <link rel="preconnect" href="https://telegram.org">
+  
+  <style>
+    :root {
+      --tg-theme-bg-color: #18222d;
+      --tg-theme-text-color: #ffffff;
+      --tg-theme-hint-color: #b1c3d5;
+      --tg-theme-link-color: #62bcf9;
+      --tg-theme-button-color: #2ea6ff;
+      --tg-theme-button-text-color: #ffffff;
+      --tg-viewport-height: 100vh;
+    }
+
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+      -webkit-tap-highlight-color: transparent;
+    }
+
+    body {
+      background-color: var(--tg-theme-bg-color);
+      color: var(--tg-theme-text-color);
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+      line-height: 1.5;
+      overflow: hidden;
+      height: var(--tg-viewport-height);
+      width: 100vw;
+      position: fixed;
+      touch-action: manipulation;
+    }
+
+    /* Для полноэкранного режима Telegram */
+    body.telegram-fullscreen {
+      height: 100vh !important;
+    }
+
+    /* Заглушка для состояния загрузки */
+    #root {
+      height: 100%;
+      display: flex;
+      flex-direction: column;
+    }
+
+    .loading-overlay {
+      position: absolute;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: var(--tg-theme-bg-color);
+      z-index: 1000;
+      flex-direction: column;
+      gap: 20px;
+    }
+
+    .loading-spinner {
+      width: 50px;
+      height: 50px;
+      border: 5px solid rgba(255, 255, 255, 0.1);
+      border-radius: 50%;
+      border-top-color: var(--tg-theme-button-color);
+      animation: spin 1s linear infinite;
+    }
+
+    @keyframes spin {
+      to { transform: rotate(360deg); }
+    }
+
+    /* Сообщение об ошибке */
+    .telegram-error {
+      padding: 20px;
+      text-align: center;
+      color: #ff6b6b;
+      display: none;
+    }
+
+    /* Для тестирования вне Telegram */
+    .web-browser-warning {
+      position: fixed;
+      bottom: 10px;
+      left: 10px;
+      right: 10px;
+      background: rgba(255, 0, 0, 0.1);
+      color: #ff6b6b;
+      padding: 8px;
+      border-radius: 8px;
+      font-size: 12px;
+      text-align: center;
+      display: none;
+    }
+  </style>
+  <script type="module" crossorigin src="/assets/index-DDe6qgw-.js"></script>
+  <link rel="stylesheet" crossorigin href="/assets/index-D1oHO34H.css">
+</head>
+<body>
+  <div id="root">
+    <!-- Заглушка загрузки -->
+    <div class="loading-overlay">
+      <div class="loading-spinner"></div>
+      <div>Загрузка приложения...</div>
+    </div>
+    
+    <!-- Сообщение об ошибке -->
+    <div class="telegram-error" id="telegram-error">
+      Приложение должно открываться внутри Telegram. Пожалуйста, используйте кнопку в боте.
+    </div>
+  </div>
+  
+  <!-- Предупреждение при тестировании вне Telegram -->
+  <div class="web-browser-warning" id="web-browser-warning">
+    Режим разработки: приложение запущено вне Telegram
+  </div>
+
+  
+  <script>
+    // Инициализация Telegram WebApp
+    (function initTelegramWebApp() {
+      // Проверяем, что находимся в среде Telegram
+      const isTelegram = window.Telegram && window.Telegram.WebApp;
+      const errorEl = document.getElementById('telegram-error');
+      const warningEl = document.getElementById('web-browser-warning');
+      
+      if (isTelegram) {
+        const tg = window.Telegram.WebApp;
+        
+        // Установка высоты viewport
+        document.documentElement.style.setProperty(
+          '--tg-viewport-height', 
+          tg.viewportHeight + 'px'
+        );
+        
+        // Развернуть на весь экран
+        tg.expand();
+        
+        // Показываем интерфейс после инициализации
+        tg.ready();
+        
+        // Обработка изменения темы
+        tg.onEvent('themeChanged', updateTheme);
+        updateTheme();
+        
+        // Обработка изменения размеров окна
+        tg.onEvent('viewportChanged', () => {
+          document.documentElement.style.setProperty(
+            '--tg-viewport-height', 
+            tg.viewportHeight + 'px'
+          );
+        });
+        
+        // Добавляем класс для стилей
+        document.body.classList.add('telegram-fullscreen');
+        
+        // Функция для обновления темы
+        function updateTheme() {
+          document.documentElement.style.setProperty(
+            '--tg-theme-bg-color', 
+            tg.themeParams.bg_color || '#18222d'
+          );
+          document.documentElement.style.setProperty(
+            '--tg-theme-text-color', 
+            tg.themeParams.text_color || '#ffffff'
+          );
+          document.documentElement.style.setProperty(
+            '--tg-theme-hint-color', 
+            tg.themeParams.hint_color || '#b1c3d5'
+          );
+          document.documentElement.style.setProperty(
+            '--tg-theme-link-color', 
+            tg.themeParams.link_color || '#62bcf9'
+          );
+          document.documentElement.style.setProperty(
+            '--tg-theme-button-color', 
+            tg.themeParams.button_color || '#2ea6ff'
+          );
+          document.documentElement.style.setProperty(
+            '--tg-theme-button-text-color', 
+            tg.themeParams.button_text_color || '#ffffff'
+          );
+        }
+        
+        // Экспортируем в глобальную область для доступа из React
+        window.TelegramWebApp = {
+          sendData: (data) => tg.sendData(JSON.stringify(data)),
+          showAlert: (message) => tg.showAlert(message),
+          close: () => tg.close(),
+          user: tg.initDataUnsafe.user
+        };
+        
+      } else {
+        // Режим разработки вне Telegram
+        warningEl.style.display = 'block';
+        document.body.classList.add('web-browser');
+        
+        // Для тестирования создаем mock-объект
+        window.TelegramWebApp = {
+          sendData: (data) => console.log('Data sent to Telegram:', data),
+          showAlert: (message) => alert('Telegram Alert: ' + message),
+          close: () => console.log('WebApp closed'),
+          user: {
+            id: 123456789,
+            first_name: 'Test',
+            username: 'test_user'
+          }
+        };
+        
+        // Показываем предупреждение через 3 секунды
+        setTimeout(() => {
+          if (!window.Telegram?.WebApp) {
+            errorEl.style.display = 'block';
+          }
+        }, 3000);
+      }
+      
+      // Скрываем лоадер после загрузки приложения
+      window.addEventListener('app-loaded', () => {
+        document.querySelector('.loading-overlay').style.display = 'none';
+      });
+    })();
+  </script>
+</body>
 </html>
